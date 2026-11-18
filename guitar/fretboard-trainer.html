@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guitar Fretboard Trainer</title>
+<style>
+:root{color-scheme:light dark;--bg:#f6f7f9;--card:#fff;--text:#17191d;--muted:#737984;--border:#e1e4e9;--accent:#2563eb;--accent-soft:#e8efff;--panel:#f0f2f5}
+@media(prefers-color-scheme:dark){:root{--bg:#111318;--card:#1b1e25;--text:#f2f3f5;--muted:#a0a6b2;--border:#343944;--accent:#78a2ff;--accent-soft:#283653;--panel:#252a34}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:32px 20px 48px;display:flex;flex-direction:column;align-items:center;gap:20px}
+header{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.09em;color:var(--muted)}.sub{font-size:12px;color:var(--muted);margin-top:4px}
+.status{font-size:12px;border-radius:99px;padding:6px 12px;background:var(--panel);color:var(--muted)}
+.card{width:100%;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px}
+.display{display:flex;flex-direction:column;align-items:center;gap:12px}
+.display-top{width:100%;display:flex;justify-content:space-between;color:var(--muted);font-size:12px;font-weight:650}
+.notes{display:flex;align-items:center;justify-content:center;gap:clamp(20px,6vw,48px);padding:24px 0 16px;min-height:160px;width:100%}
+.current{font-size:clamp(82px,18vw,138px);line-height:1;font-weight:760;letter-spacing:-.07em}
+.next-wrap{text-align:center}.next-label{font-size:11px;color:var(--muted)}.next{font-size:clamp(30px,6vw,44px);color:var(--muted);font-weight:500}
+.details{display:flex;gap:9px;align-items:center;font-size:14px}.muted{color:var(--muted)}
+.dots{display:flex;gap:10px;padding-top:8px}.dot{width:11px;height:11px;border-radius:50%;background:var(--border)}.dot.active{background:var(--accent);transform:scale(1.2)}.dot.done{background:var(--muted)}
+.stats{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.stat{min-height:126px}.stat-label{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted)}.bpm{font-size:32px;font-weight:700;margin-top:4px}.bpm small{font-size:14px;color:var(--muted);font-weight:500}
+input[type=range]{width:100%;accent-color:var(--accent);margin:12px 0 0}.range-labels{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+.metro-state{display:flex;align-items:center;gap:10px;margin-top:15px;font-weight:600}.pulse{width:14px;height:14px;border-radius:50%;background:var(--border)}.hint{font-size:12px;color:var(--muted);margin-top:8px}
+.controls{width:100%;display:flex;gap:12px}button{font:inherit;cursor:pointer;border-radius:12px;padding:11px 24px;font-weight:650;border:1px solid var(--border);background:transparent;color:var(--text);flex:1}button.primary{background:var(--accent);border-color:var(--accent);color:white}button:disabled{opacity:.4;cursor:not-allowed}
+.string-row{display:flex;justify-content:space-between;gap:5px;flex-wrap:nowrap}.string{font-size:12px;color:var(--muted);background:var(--panel);border-radius:8px;padding:5px 9px}.string.active{background:var(--accent-soft);color:var(--text);outline:1px solid var(--accent);font-weight:700}
+.foot{width:100%;font-size:12px;color:var(--muted);line-height:1.65}
+@media(max-width:420px){main{padding:22px 14px 36px;gap:14px}.card{padding:16px}.string{padding:5px 6px;font-size:11px}.notes{min-height:130px}}
+</style>
+</head>
+<body>
+<main>
+<header><div><div class="eyebrow">GUITAR FRETBOARD TRAINER</div><div class="sub">Chromatic note recognition · All six strings</div></div><div class="status" id="status">Ready</div></header>
+<section class="card display">
+<div class="display-top"><span>CURRENT NOTE</span><span id="direction">6th → 1st string</span></div>
+<div class="notes"><div class="current" id="current" aria-live="polite">—</div><div class="next-wrap"><div class="next-label">NEXT</div><div class="next" id="next">—</div></div></div>
+<div class="details"><strong id="string-label">String 6 · Low E</strong><span class="muted">|</span><span class="muted" id="progress">Note 1 / 12</span></div>
+<div class="dots" id="dots" aria-label="Beat progress"><span class="dot active"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+<div class="muted" style="font-size:12px" id="beat-label">Ready to begin</div>
+</section>
+<section class="stats">
+<div class="card stat"><div class="stat-label">TEMPO</div><div class="bpm"><span id="bpm-value">40</span> <small>BPM</small></div><input id="tempo" type="range" min="30" max="200" value="40" aria-label="Metronome tempo"><div class="range-labels"><span>30</span><span>200</span></div></div>
+<div class="card stat"><div class="stat-label">METRONOME</div><div class="metro-state"><span class="pulse" id="pulse"></span><span id="metro-state">Stopped</span></div><div class="hint">6 beats per note</div></div>
+</section>
+<div class="controls"><button class="primary" id="start">▶ Start</button><button id="stop" disabled>■ Stop</button></div>
+<section class="card" style="padding:16px">
+<div class="display-top" style="margin-bottom:12px"><span>STRING DIRECTION</span><span>Current position</span></div>
+<div class="string-row" id="strings"><span class="string">6 · E</span><span class="string">5 · A</span><span class="string">4 · D</span><span class="string">3 · G</span><span class="string">2 · B</span><span class="string">1 · E</span></div>
+<div class="display-top" style="margin-top:13px;font-weight:400"><span>Low E → High E</span><span id="round">Round 1</span></div>
+</section>
+<div class="foot"><strong>How it works</strong><br>Play one note per string, descending from the 6th string to the 1st, then ascending from the 1st to the 6th using six different notes. All 12 chromatic notes are played once before a new random round begins. Stop pauses the exercise; Start resumes where you left off.</div>
+<div class="foot" id="error" role="status"></div>
+</main>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const sharp=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+const flat=['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
+const enharmonic=new Set([1,3,6,8,10]);
+const strings=[{number:6,name:'Low E'},{number:5,name:'A'},{number:4,name:'D'},{number:3,name:'G'},{number:2,name:'B'},{number:1,name:'High E'}];
+let sequence=[],position=0,round=1,beat=0,bpm=40,running=false,audio=null,timer=null,nextTime=0,epoch=0;
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function makeRound(){sequence=shuffle(Array.from({length:12},(_,i)=>i)).map(n=>({pitch:n,name:enharmonic.has(n)&&Math.random()<.5?flat[n]:sharp[n]}));position=0}
+function stringAt(p){return p<6?strings[p]:strings[11-p]}
+function update(){
+const s=stringAt(position);$('current').textContent=sequence[position].name;$('next').textContent=sequence[(position+1)%12].name;
+$('string-label').textContent=`String ${s.number} · ${s.name}`;$('direction').textContent=position<6?'6th → 1st string':'1st → 6th string';$('progress').textContent=`Note ${position+1} / 12`;$('round').textContent=`Round ${round}`;
+[...$('strings').children].forEach((el,i)=>el.classList.toggle('active',i===s.number-1));updateDots()
+}
+function updateDots(){[...$('dots').children].forEach((el,i)=>{el.classList.toggle('active',i===beat);el.classList.toggle('done',i<beat)});$('beat-label').textContent=running?`Beat ${beat+1} of 6`:'Ready to begin'}
+function flash(){const p=$('pulse');p.style.background='var(--accent)';setTimeout(()=>{if(!running)p.style.background='var(--border)'},140)}
+function tick(){
+if(!running)return;
+const now=audio.currentTime;
+while(nextTime<now+.12){
+const when=nextTime;const myEpoch=epoch;const delay=Math.max(0,(when-now)*1000);
+const osc=audio.createOscillator(),gain=audio.createGain();osc.type='sine';osc.frequency.value=beat===0?1100:800;
+gain.gain.setValueAtTime(.0001,when);gain.gain.exponentialRampToValueAtTime(beat===0?.2:.11,when+.004);gain.gain.exponentialRampToValueAtTime(.0001,when+.05);osc.connect(gain);gain.connect(audio.destination);osc.start(when);osc.stop(when+.055);
+setTimeout(()=>{if(!running||myEpoch!==epoch)return;flash();advance()},delay+8);
+nextTime+=60/bpm;
+}
+timer=setTimeout(tick,20)
+}
+function advance(){beat++;if(beat===6){beat=0;position++;if(position===12){round++;makeRound()}update()}updateDots()}
+async function start(){
+if(running)return;
+try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw Error('This browser does not support Web Audio.');if(!audio)audio=new AC();await audio.resume();running=true;epoch++;$('start').disabled=true;$('stop').disabled=false;$('status').textContent='Practising';$('metro-state').textContent='Playing';$('error').textContent='';update();nextTime=audio.currentTime+.05;tick()}catch(e){$('error').textContent=e.message}
+}
+function stop(){running=false;epoch++;clearTimeout(timer);$('start').disabled=false;$('stop').disabled=true;$('status').textContent='Stopped';$('metro-state').textContent='Stopped';$('pulse').style.background='var(--border)';$('beat-label').textContent='Paused · Press Start to resume';updateDots()}
+$('start').addEventListener('click',start);$('stop').addEventListener('click',stop);
+$('tempo').addEventListener('input',e=>{bpm=Number(e.target.value);$('bpm-value').textContent=bpm});
+makeRound();update();
+})();
+</script>
+</body></html>
