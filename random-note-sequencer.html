@@ -70,7 +70,7 @@ const sharp=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 const flat=['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
 const enharmonic=new Set([1,3,6,8,10]);
 const strings=[{number:6,name:'Low E'},{number:5,name:'A'},{number:4,name:'D'},{number:3,name:'G'},{number:2,name:'B'},{number:1,name:'High E'}];
-let sequence=makeRound(),nextSequence=makeRound(),position=0,round=1,beat=0,bpm=40,bpn=6,countIn=false,ciBeat=0,running=false,audio=null,timer=null,nextTime=0,epoch=0;
+let sequence=makeRound(),nextSequence=makeRound(),position=0,round=1,beat=0,bpm=40,bpn=6,countIn=false,ciBeat=0,running=false,audio=null,timer=null,nextTime=0,epoch=0,pendingUpdate=false;
 
 // --- Cookies -------------------------------------------------------------
 function setCookie(name,value){const d=new Date();d.setFullYear(d.getFullYear()+1);document.cookie=name+'='+value+';expires='+d.toUTCString()+';path=/;SameSite=Lax'}
@@ -90,29 +90,42 @@ const dots=[...$('dots').children];
 dots.forEach((el,i)=>{el.classList.toggle('active',!countIn&&i===beat);el.classList.toggle('done',!countIn&&i<beat)});
 $('beat-label').textContent=!running?(timer===null&&ciBeat===0&&beat===0?'Ready to begin':'Paused · Press Start to resume'):countIn?`Count-in ${Math.min(ciBeat+1,COUNT_IN)} of ${COUNT_IN}`:`Beat ${beat+1} of ${bpn}`
 }
+// Highlight the beat whose tick is sounding right now, without touching counters.
+function paintBeat(b,inCountIn,ci){
+const dots=[...$('dots').children];
+if(inCountIn&&countIn){
+dots.forEach(el=>{el.classList.remove('active','done')});
+$('beat-label').textContent=`Count-in ${Math.min(ci+1,COUNT_IN)} of ${COUNT_IN}`;
+return
+}
+dots.forEach((el,i)=>{el.classList.toggle('active',i===b);el.classList.toggle('done',i<b)});
+$('beat-label').textContent=`Beat ${b+1} of ${bpn}`
+}
+// Advance the state counters. Repaints are deferred to the next tick (pendingUpdate),
+// so a new note appears exactly when its first accented tick sounds.
+function stepState(){
+if(countIn){
+ciBeat++;
+if(ciBeat>=COUNT_IN){countIn=false;ciBeat=0;beat=0;pendingUpdate=true}
+}else{
+beat++;
+if(beat>=bpn){beat=0;position++;if(position>=12){position=0;round++;sequence=nextSequence;nextSequence=makeRound()}pendingUpdate=true}
+}
+}
 function flash(){const p=$('pulse');p.style.background='var(--accent)';setTimeout(()=>{if(!running)p.style.background='var(--border)'},140)}
 function tick(){
 if(!running)return;
 const now=audio.currentTime;
 while(nextTime<now+.12){
 const when=nextTime;const myEpoch=epoch;const delay=Math.max(0,(when-now)*1000);
+const myBeat=beat,myCountIn=countIn,myCi=ciBeat;
 const isAccent=countIn?ciBeat===0:beat===0;
 const osc=audio.createOscillator(),gain=audio.createGain();osc.type='sine';osc.frequency.value=isAccent?1100:(countIn?900:800);
 gain.gain.setValueAtTime(.0001,when);gain.gain.exponentialRampToValueAtTime(isAccent?.2:(countIn?.14:.11),when+.004);gain.gain.exponentialRampToValueAtTime(.0001,when+.05);osc.connect(gain);gain.connect(audio.destination);osc.start(when);osc.stop(when+.055);
-setTimeout(()=>{if(!running||myEpoch!==epoch)return;flash();advance()},delay+8);
+setTimeout(()=>{if(!running||myEpoch!==epoch)return;flash();if(pendingUpdate){pendingUpdate=false;update()}paintBeat(myBeat,myCountIn,myCi);stepState()},delay);
 nextTime+=60/bpm;
 }
 timer=setTimeout(tick,20)
-}
-function advance(){
-if(countIn){
-ciBeat++;
-if(ciBeat>=COUNT_IN){countIn=false;ciBeat=0;beat=0;update()}
-}else{
-beat++;
-if(beat>=bpn){beat=0;position++;if(position>=12){position=0;round++;sequence=nextSequence;nextSequence=makeRound()}update()}
-}
-updateDots()
 }
 function setBpm(v){
 bpm=Math.min(MAX_BPM,Math.max(MIN_BPM,v));
@@ -130,14 +143,14 @@ if(running)return;
 try{
 const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw Error('This browser does not support Web Audio.');
 if(!audio)audio=new AC();await audio.resume();
-sequence=makeRound();nextSequence=makeRound();position=0;round=1;beat=0;countIn=true;ciBeat=0;
+sequence=makeRound();nextSequence=makeRound();position=0;round=1;beat=0;countIn=true;ciBeat=0;pendingUpdate=false;
 running=true;epoch++;
 $('start').disabled=true;$('stop').disabled=false;$('status').textContent='Practising';$('metro-state').textContent='Playing';$('error').textContent='';
 buildDots();update();nextTime=audio.currentTime+.05;tick()
 }catch(e){$('error').textContent=e.message}
 }
 function stop(){
-running=false;epoch++;clearTimeout(timer);timer=null;countIn=false;ciBeat=0;
+running=false;epoch++;clearTimeout(timer);timer=null;countIn=false;ciBeat=0;pendingUpdate=false;
 $('start').disabled=false;$('stop').disabled=true;$('status').textContent='Stopped';$('metro-state').textContent='Stopped';$('pulse').style.background='var(--border)';
 updateDots()
 }
