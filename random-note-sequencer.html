@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Random Note Sequencer</title>
+<style>
+:root{color-scheme:light dark;--bg:#f6f7f9;--card:#fff;--text:#17191d;--muted:#737984;--border:#e1e4e9;--accent:#2563eb;--accent-soft:#e8efff;--panel:#f0f2f5}
+@media(prefers-color-scheme:dark){:root{--bg:#111318;--card:#1b1e25;--text:#f2f3f5;--muted:#a0a6b2;--border:#343944;--accent:#78a2ff;--accent-soft:#283653;--panel:#252a34}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:32px 20px 48px;display:flex;flex-direction:column;align-items:center;gap:20px}
+header{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.09em;color:var(--muted)}.sub{font-size:12px;color:var(--muted);margin-top:4px}
+.status{font-size:12px;border-radius:99px;padding:6px 12px;background:var(--panel);color:var(--muted)}
+.card{width:100%;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px}
+.display{display:flex;flex-direction:column;align-items:center;gap:12px}
+.display-top{width:100%;display:flex;justify-content:space-between;color:var(--muted);font-size:12px;font-weight:650}
+.notes{display:flex;align-items:center;justify-content:center;gap:clamp(20px,6vw,48px);padding:24px 0 16px;min-height:160px;width:100%}
+.current{font-size:clamp(82px,18vw,138px);line-height:1;font-weight:760;letter-spacing:-.07em}
+.next-wrap{text-align:center}.next-label{font-size:11px;color:var(--muted)}.next{font-size:clamp(30px,6vw,44px);color:var(--muted);font-weight:500}
+.details{display:flex;gap:9px;align-items:center;font-size:14px}.muted{color:var(--muted)}
+.dots{display:flex;gap:10px;padding-top:8px}.dot{width:11px;height:11px;border-radius:50%;background:var(--border)}.dot.active{background:var(--accent);transform:scale(1.2)}.dot.done{background:var(--muted)}
+.stats{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.stat-label{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted)}
+input[type=range]{width:100%;accent-color:var(--accent);margin:12px 0 0}.range-labels{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+.stepper{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px}
+.stepper-val{font-size:28px;font-weight:700;min-width:96px;text-align:center;display:flex;justify-content:center;align-items:baseline;gap:5px}
+.stepper-val small{font-size:13px;color:var(--muted);font-weight:500}
+button{font:inherit;cursor:pointer;border-radius:12px;padding:11px 24px;font-weight:650;border:1px solid var(--border);background:transparent;color:var(--text);flex:1}
+button.primary{background:var(--accent);border-color:var(--accent);color:white}button:disabled{opacity:.4;cursor:not-allowed}
+.step-btn{flex:0 0 46px;padding:7px 0;font-size:19px;line-height:1;display:flex;align-items:center;justify-content:center}
+.metro-state{display:flex;align-items:center;gap:10px;margin-top:15px;font-weight:600}.pulse{width:14px;height:14px;border-radius:50%;background:var(--border)}.hint{font-size:12px;color:var(--muted);margin-top:8px}
+.controls{width:100%;display:flex;gap:12px}
+.foot{width:100%;font-size:12px;color:var(--muted);line-height:1.65}
+@media(max-width:420px){main{padding:22px 14px 36px;gap:14px}.card{padding:16px}.notes{min-height:130px}}
+</style>
+</head>
+<body>
+<main>
+<header><div><div class="eyebrow">RANDOM NOTE SEQUENCER</div><div class="sub">Chromatic note recognition</div></div><div class="status" id="status">Ready</div></header>
+<section class="card display">
+<div class="display-top"><span>CURRENT NOTE</span><span id="direction">6th → 1st string</span></div>
+<div class="notes"><div class="current" id="current" aria-live="polite">—</div><div class="next-wrap"><div class="next-label">NEXT</div><div class="next" id="next">—</div></div></div>
+<div class="details"><strong id="string-label">String 6 · Low E</strong><span class="muted">|</span><span class="muted" id="progress">Note 1 / 12</span><span class="muted">|</span><span class="muted" id="round">Round 1</span></div>
+<div class="dots" id="dots" aria-label="Beat progress"></div>
+<div class="muted" style="font-size:12px" id="beat-label">Ready to begin</div>
+</section>
+<section class="stats">
+<div class="card stat">
+<div class="stat-label">TEMPO</div>
+<div class="stepper"><button class="step-btn" id="bpm-down" aria-label="Decrease tempo by 1 BPM">−</button><span class="stepper-val"><span id="bpm-value">40</span><small>BPM</small></span><button class="step-btn" id="bpm-up" aria-label="Increase tempo by 1 BPM">+</button></div>
+<input id="tempo" type="range" min="30" max="200" value="40" aria-label="Metronome tempo"><div class="range-labels"><span>30</span><span>200</span></div>
+</div>
+<div class="card stat">
+<div class="stat-label">METRONOME</div>
+<div class="stepper"><button class="step-btn" id="bpn-down" aria-label="Decrease beats per note">−</button><span class="stepper-val"><span id="bpn-value">6</span><small>beats/note</small></span><button class="step-btn" id="bpn-up" aria-label="Increase beats per note">+</button></span></div>
+<div class="metro-state"><span class="pulse" id="pulse"></span><span id="metro-state">Stopped</span></div>
+<div class="hint" id="bpn-hint">6 beats per note</div>
+</div>
+</section>
+<div class="controls"><button class="primary" id="start">▶ Start</button><button id="stop" disabled>■ Stop</button></div>
+<div class="foot"><strong>How it works</strong><br>A 4-beat count-in leads you in. All 12 chromatic notes are played once before a new random round begins. Each press of Start shuffles a fresh random order; Stop pauses the exercise. Your tempo is remembered between visits.</div>
+<div class="foot" id="error" role="status"></div>
+</main>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const MIN_BPM=30,MAX_BPM=200,COUNT_IN=4;
+const sharp=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+const flat=['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
+const enharmonic=new Set([1,3,6,8,10]);
+const strings=[{number:6,name:'Low E'},{number:5,name:'A'},{number:4,name:'D'},{number:3,name:'G'},{number:2,name:'B'},{number:1,name:'High E'}];
+let sequence=[],position=0,round=1,beat=0,bpm=40,bpn=6,countIn=false,ciBeat=0,running=false,audio=null,timer=null,nextTime=0,epoch=0;
+
+// --- Cookies -------------------------------------------------------------
+function setCookie(name,value){const d=new Date();d.setFullYear(d.getFullYear()+1);document.cookie=name+'='+value+';expires='+d.toUTCString()+';path=/;SameSite=Lax'}
+function getCookie(name){const m=document.cookie.match(new RegExp('(?:^|; )'+name+'=([^;]*)'));return m?decodeURIComponent(m[1]):null}
+
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function makeRound(){sequence=shuffle(Array.from({length:12},(_,i)=>i)).map(n=>({pitch:n,name:enharmonic.has(n)&&Math.random()<.5?flat[n]:sharp[n]}))}
+function stringAt(p){return p<6?strings[p]:strings[11-p]}
+function buildDots(){$('dots').innerHTML=Array.from({length:bpn},()=>'<span class="dot"></span>').join('')}
+function update(){
+const s=stringAt(position);$('current').textContent=sequence[position].name;$('next').textContent=sequence[(position+1)%12].name;
+$('string-label').textContent=`String ${s.number} · ${s.name}`;$('direction').textContent=position<6?'6th → 1st string':'1st → 6th string';$('progress').textContent=`Note ${position+1} / 12`;$('round').textContent=`Round ${round}`;
+updateDots()
+}
+function updateDots(){
+const dots=[...$('dots').children];
+dots.forEach((el,i)=>{el.classList.toggle('active',!countIn&&i===beat);el.classList.toggle('done',!countIn&&i<beat)});
+$('beat-label').textContent=!running?(timer===null&&ciBeat===0&&beat===0?'Ready to begin':'Paused · Press Start to resume'):countIn?`Count-in ${Math.min(ciBeat+1,COUNT_IN)} of ${COUNT_IN}`:`Beat ${beat+1} of ${bpn}`
+}
+function flash(){const p=$('pulse');p.style.background='var(--accent)';setTimeout(()=>{if(!running)p.style.background='var(--border)'},140)}
+function tick(){
+if(!running)return;
+const now=audio.currentTime;
+while(nextTime<now+.12){
+const when=nextTime;const myEpoch=epoch;const delay=Math.max(0,(when-now)*1000);
+const isAccent=countIn?ciBeat===0:beat===0;
+const osc=audio.createOscillator(),gain=audio.createGain();osc.type='sine';osc.frequency.value=isAccent?1100:(countIn?900:800);
+gain.gain.setValueAtTime(.0001,when);gain.gain.exponentialRampToValueAtTime(isAccent?.2:(countIn?.14:.11),when+.004);gain.gain.exponentialRampToValueAtTime(.0001,when+.05);osc.connect(gain);gain.connect(audio.destination);osc.start(when);osc.stop(when+.055);
+setTimeout(()=>{if(!running||myEpoch!==epoch)return;flash();advance()},delay+8);
+nextTime+=60/bpm;
+}
+timer=setTimeout(tick,20)
+}
+function advance(){
+if(countIn){
+ciBeat++;
+if(ciBeat>=COUNT_IN){countIn=false;ciBeat=0;beat=0;update()}
+}else{
+beat++;
+if(beat>=bpn){beat=0;position++;if(position>=12){position=0;round++;makeRound()}update()}
+}
+updateDots()
+}
+function setBpm(v){
+bpm=Math.min(MAX_BPM,Math.max(MIN_BPM,v));
+$('bpm-value').textContent=bpm;$('tempo').value=bpm;
+setCookie('gft-tempo',bpm)
+}
+function setBpn(v){
+bpn=Math.min(8,Math.max(1,v));
+$('bpn-value').textContent=bpn;$('bpn-hint').textContent=`${bpn} beat${bpn===1?'':'s'} per note`;
+if(beat>=bpn)beat=bpn-1;
+buildDots();updateDots()
+}
+async function start(){
+if(running)return;
+try{
+const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw Error('This browser does not support Web Audio.');
+if(!audio)audio=new AC();await audio.resume();
+makeRound();position=0;round=1;beat=0;countIn=true;ciBeat=0;
+running=true;epoch++;
+$('start').disabled=true;$('stop').disabled=false;$('status').textContent='Practising';$('metro-state').textContent='Playing';$('error').textContent='';
+buildDots();update();nextTime=audio.currentTime+.05;tick()
+}catch(e){$('error').textContent=e.message}
+}
+function stop(){
+running=false;epoch++;clearTimeout(timer);timer=null;countIn=false;ciBeat=0;
+$('start').disabled=false;$('stop').disabled=true;$('status').textContent='Stopped';$('metro-state').textContent='Stopped';$('pulse').style.background='var(--border)';
+updateDots()
+}
+$('start').addEventListener('click',start);$('stop').addEventListener('click',stop);
+$('bpm-down').addEventListener('click',()=>setBpm(bpm-1));
+$('bpm-up').addEventListener('click',()=>setBpm(bpm+1));
+$('tempo').addEventListener('input',e=>setBpm(Number(e.target.value)));
+$('bpn-down').addEventListener('click',()=>setBpn(bpn-1));
+$('bpn-up').addEventListener('click',()=>setBpn(bpn+1));
+const saved=getCookie('gft-tempo');if(saved!==null&&!isNaN(+saved))setBpm(Math.round(+saved));
+makeRound();buildDots();update();
+})();
+</script>
+</body></html>
