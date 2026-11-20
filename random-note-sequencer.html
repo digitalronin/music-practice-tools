@@ -70,18 +70,18 @@ const sharp=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 const flat=['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
 const enharmonic=new Set([1,3,6,8,10]);
 const strings=[{number:6,name:'Low E'},{number:5,name:'A'},{number:4,name:'D'},{number:3,name:'G'},{number:2,name:'B'},{number:1,name:'High E'}];
-let sequence=[],position=0,round=1,beat=0,bpm=40,bpn=6,countIn=false,ciBeat=0,running=false,audio=null,timer=null,nextTime=0,epoch=0;
+let sequence=makeRound(),nextSequence=makeRound(),position=0,round=1,beat=0,bpm=40,bpn=6,countIn=false,ciBeat=0,running=false,audio=null,timer=null,nextTime=0,epoch=0;
 
 // --- Cookies -------------------------------------------------------------
 function setCookie(name,value){const d=new Date();d.setFullYear(d.getFullYear()+1);document.cookie=name+'='+value+';expires='+d.toUTCString()+';path=/;SameSite=Lax'}
 function getCookie(name){const m=document.cookie.match(new RegExp('(?:^|; )'+name+'=([^;]*)'));return m?decodeURIComponent(m[1]):null}
 
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
-function makeRound(){sequence=shuffle(Array.from({length:12},(_,i)=>i)).map(n=>({pitch:n,name:enharmonic.has(n)&&Math.random()<.5?flat[n]:sharp[n]}))}
+function makeRound(){return shuffle(Array.from({length:12},(_,i)=>i)).map(n=>({pitch:n,name:enharmonic.has(n)&&Math.random()<.5?flat[n]:sharp[n]}))}
 function stringAt(p){return p<6?strings[p]:strings[11-p]}
 function buildDots(){$('dots').innerHTML=Array.from({length:bpn},()=>'<span class="dot"></span>').join('')}
 function update(){
-const s=stringAt(position);$('current').textContent=sequence[position].name;$('next').textContent=sequence[(position+1)%12].name;
+const s=stringAt(position);$('current').textContent=sequence[position].name;$('next').textContent=(position===11?nextSequence[0]:sequence[position+1]).name;
 $('string-label').textContent=`String ${s.number} · ${s.name}`;$('direction').textContent=position<6?'6th → 1st string':'1st → 6th string';$('progress').textContent=`Note ${position+1} / 12`;$('round').textContent=`Round ${round}`;
 updateDots()
 }
@@ -110,7 +110,7 @@ ciBeat++;
 if(ciBeat>=COUNT_IN){countIn=false;ciBeat=0;beat=0;update()}
 }else{
 beat++;
-if(beat>=bpn){beat=0;position++;if(position>=12){position=0;round++;makeRound()}update()}
+if(beat>=bpn){beat=0;position++;if(position>=12){position=0;round++;sequence=nextSequence;nextSequence=makeRound()}update()}
 }
 updateDots()
 }
@@ -130,7 +130,7 @@ if(running)return;
 try{
 const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw Error('This browser does not support Web Audio.');
 if(!audio)audio=new AC();await audio.resume();
-makeRound();position=0;round=1;beat=0;countIn=true;ciBeat=0;
+sequence=makeRound();nextSequence=makeRound();position=0;round=1;beat=0;countIn=true;ciBeat=0;
 running=true;epoch++;
 $('start').disabled=true;$('stop').disabled=false;$('status').textContent='Practising';$('metro-state').textContent='Playing';$('error').textContent='';
 buildDots();update();nextTime=audio.currentTime+.05;tick()
@@ -148,7 +148,7 @@ $('tempo').addEventListener('input',e=>setBpm(Number(e.target.value)));
 $('bpn-down').addEventListener('click',()=>setBpn(bpn-1));
 $('bpn-up').addEventListener('click',()=>setBpn(bpn+1));
 const saved=getCookie('gft-tempo');if(saved!==null&&!isNaN(+saved))setBpm(Math.round(+saved));
-makeRound();buildDots();update();
+buildDots();update();
 })();
 </script>
 </body></html>
