@@ -15,9 +15,10 @@ header{width:100%;display:flex;justify-content:space-between;align-items:center;
 .card{width:100%;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px}
 .display{display:flex;flex-direction:column;align-items:center;gap:12px}
 .display-top{width:100%;display:flex;justify-content:space-between;color:var(--muted);font-size:12px;font-weight:650}
-.notes{display:flex;align-items:center;justify-content:center;gap:clamp(20px,6vw,48px);padding:24px 0 16px;min-height:160px;width:100%}
-.current{font-size:clamp(82px,18vw,138px);line-height:1;font-weight:760;letter-spacing:-.07em}
-.next-wrap{text-align:center}.next-label{font-size:11px;color:var(--muted)}.next{font-size:clamp(30px,6vw,44px);color:var(--muted);font-weight:500}
+.notes{display:flex;align-items:center;justify-content:center;gap:clamp(16px,5vw,40px);padding:24px 0 16px;min-height:160px;width:100%}
+.current{font-size:clamp(72px,16vw,124px);line-height:1;font-weight:760;letter-spacing:-.07em}
+.next-wrap{text-align:center}.next-label{font-size:11px;color:var(--muted)}.next{font-size:clamp(28px,5.5vw,42px);color:var(--muted);font-weight:500}
+.next.further{font-size:clamp(20px,4vw,30px);opacity:.75;font-weight:400}
 .details{display:flex;gap:9px;align-items:center;font-size:14px}.muted{color:var(--muted)}
 .dots{display:flex;gap:10px;padding-top:8px}.dot{width:11px;height:11px;border-radius:50%;background:var(--border)}.dot.active{background:var(--accent);transform:scale(1.2)}.dot.done{background:var(--muted)}
 .stats{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -40,7 +41,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:white}b
 <header><div><div class="eyebrow">RANDOM NOTE SEQUENCER</div><div class="sub">Chromatic note recognition</div></div><div class="status" id="status">Ready</div></header>
 <section class="card display">
 <div class="display-top"><span>CURRENT NOTE</span><span id="direction">6th → 1st string</span></div>
-<div class="notes"><div class="current" id="current" aria-live="polite">—</div><div class="next-wrap"><div class="next-label">NEXT</div><div class="next" id="next">—</div></div></div>
+<div class="notes"><div class="current" id="current" aria-live="polite">—</div><div class="next-wrap"><div class="next-label">NEXT</div><div class="next" id="next">—</div></div><div class="next-wrap"><div class="next-label">THEN</div><div class="next further" id="next2">—</div></div></div>
 <div class="details"><strong id="string-label">String 6 · Low E</strong><span class="muted">|</span><span class="muted" id="progress">Note 1 / 12</span><span class="muted">|</span><span class="muted" id="round">Round 1</span></div>
 <div class="dots" id="dots" aria-label="Beat progress"></div>
 <div class="muted" style="font-size:12px" id="beat-label">Ready to begin</div>
@@ -79,9 +80,14 @@ function getCookie(name){const m=document.cookie.match(new RegExp('(?:^|; )'+nam
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function makeRound(){return shuffle(Array.from({length:12},(_,i)=>i)).map(n=>({pitch:n,name:enharmonic.has(n)&&Math.random()<.5?flat[n]:sharp[n]}))}
 function stringAt(p){return p<6?strings[p]:strings[11-p]}
+// The k-th upcoming note (k=1 or 2) after the current one, crossing the round boundary.
+function upcoming(k){
+const idx=position+k;
+return idx<12?sequence[idx]:nextSequence[idx-12]
+}
 function buildDots(){$('dots').innerHTML=Array.from({length:bpn},()=>'<span class="dot"></span>').join('')}
 function update(){
-const s=stringAt(position);$('current').textContent=sequence[position].name;$('next').textContent=(position===11?nextSequence[0]:sequence[position+1]).name;
+const s=stringAt(position);$('current').textContent=sequence[position].name;$('next').textContent=upcoming(1).name;$('next2').textContent=upcoming(2).name;
 $('string-label').textContent=`String ${s.number} · ${s.name}`;$('direction').textContent=position<6?'6th → 1st string':'1st → 6th string';$('progress').textContent=`Note ${position+1} / 12`;$('round').textContent=`Round ${round}`;
 updateDots()
 }
