@@ -15,10 +15,9 @@ header{width:100%;display:flex;justify-content:space-between;align-items:center;
 .card{width:100%;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px}
 .display{display:flex;flex-direction:column;align-items:center;gap:12px}
 .display-top{width:100%;display:flex;justify-content:space-between;color:var(--muted);font-size:12px;font-weight:650}
-.notes{display:flex;align-items:center;justify-content:center;gap:clamp(16px,5vw,40px);padding:24px 0 16px;min-height:160px;width:100%}
+.notes{display:flex;align-items:center;justify-content:center;gap:clamp(12px,3.5vw,32px);padding:24px 0 16px;min-height:160px;width:100%;flex-wrap:wrap}
 .current{font-size:clamp(72px,16vw,124px);line-height:1;font-weight:760;letter-spacing:-.07em}
 .next-wrap{text-align:center}.next-label{font-size:11px;color:var(--muted)}.next{font-size:clamp(28px,5.5vw,42px);color:var(--muted);font-weight:500}
-.next.further{font-size:clamp(20px,4vw,30px);opacity:.75;font-weight:400}
 .details{display:flex;gap:9px;align-items:center;font-size:14px}.muted{color:var(--muted)}
 .dots{display:flex;gap:10px;padding-top:8px}.dot{width:11px;height:11px;border-radius:50%;background:var(--border)}.dot.active{background:var(--accent);transform:scale(1.2)}.dot.done{background:var(--muted)}
 .stats{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -41,7 +40,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:white}b
 <header><div><div class="eyebrow">RANDOM NOTE SEQUENCER</div><div class="sub">Chromatic note recognition</div></div><div class="status" id="status">Ready</div></header>
 <section class="card display">
 <div class="display-top"><span>CURRENT NOTE</span><span id="direction">6th → 1st string</span></div>
-<div class="notes"><div class="current" id="current" aria-live="polite">—</div><div class="next-wrap"><div class="next-label">NEXT</div><div class="next" id="next">—</div></div><div class="next-wrap"><div class="next-label">THEN</div><div class="next further" id="next2">—</div></div></div>
+<div class="notes"><div class="current" id="current" aria-live="polite">—</div><div id="lookahead"></div></div>
 <div class="details"><strong id="string-label">String 6 · Low E</strong><span class="muted">|</span><span class="muted" id="progress">Note 1 / 12</span><span class="muted">|</span><span class="muted" id="round">Round 1</span></div>
 <div class="dots" id="dots" aria-label="Beat progress"></div>
 <div class="muted" style="font-size:12px" id="beat-label">Ready to begin</div>
@@ -58,20 +57,25 @@ button.primary{background:var(--accent);border-color:var(--accent);color:white}b
 <div class="metro-state"><span class="pulse" id="pulse"></span><span id="metro-state">Stopped</span></div>
 <div class="hint" id="bpn-hint">6 beats per note</div>
 </div>
+<div class="card stat" style="grid-column:1/-1">
+<div class="stat-label">LOOKAHEAD</div>
+<div class="stepper"><button class="step-btn" id="la-down" aria-label="Decrease lookahead by 1">−</button><span class="stepper-val"><span id="la-value">2</span><small>upcoming notes</small></span><button class="step-btn" id="la-up" aria-label="Increase lookahead by 1">+</button></div>
+<div class="hint" id="la-hint">Showing 2 upcoming notes</div>
+</div>
 </section>
 <div class="controls"><button class="primary" id="start">▶ Start</button><button id="stop" disabled>■ Stop</button></div>
-<div class="foot"><strong>How it works</strong><br>A 4-beat count-in leads you in. All 12 chromatic notes are played once before a new random round begins. Each press of Start shuffles a fresh random order; Stop pauses the exercise. Your tempo is remembered between visits.</div>
+<div class="foot"><strong>How it works</strong><br>A 4-beat count-in leads you in. All 12 chromatic notes are played once before a new random round begins. Each press of Start shuffles a fresh random order; Stop pauses the exercise. Your tempo and lookahead are remembered between visits.</div>
 <div class="foot" id="error" role="status"></div>
 </main>
 <script>
 (()=>{
 const $=id=>document.getElementById(id);
-const MIN_BPM=30,MAX_BPM=200,COUNT_IN=4;
+const MIN_BPM=30,MAX_BPM=200,COUNT_IN=4,MIN_LOOK=0,MAX_LOOK=11;
 const sharp=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 const flat=['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
 const enharmonic=new Set([1,3,6,8,10]);
 const strings=[{number:6,name:'Low E'},{number:5,name:'A'},{number:4,name:'D'},{number:3,name:'G'},{number:2,name:'B'},{number:1,name:'High E'}];
-let sequence=makeRound(),nextSequence=makeRound(),position=0,round=1,beat=0,bpm=40,bpn=6,countIn=false,ciBeat=0,running=false,audio=null,timer=null,nextTime=0,epoch=0,pendingUpdate=false;
+let sequence=makeRound(),nextSequence=makeRound(),position=0,round=1,beat=0,bpm=40,bpn=6,lookahead=2,countIn=false,ciBeat=0,running=false,audio=null,timer=null,nextTime=0,epoch=0,pendingUpdate=false;
 
 // --- Cookies -------------------------------------------------------------
 function setCookie(name,value){const d=new Date();d.setFullYear(d.getFullYear()+1);document.cookie=name+'='+value+';expires='+d.toUTCString()+';path=/;SameSite=Lax'}
@@ -80,14 +84,28 @@ function getCookie(name){const m=document.cookie.match(new RegExp('(?:^|; )'+nam
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function makeRound(){return shuffle(Array.from({length:12},(_,i)=>i)).map(n=>({pitch:n,name:enharmonic.has(n)&&Math.random()<.5?flat[n]:sharp[n]}))}
 function stringAt(p){return p<6?strings[p]:strings[11-p]}
-// The k-th upcoming note (k=1 or 2) after the current one, crossing the round boundary.
+// The k-th upcoming note (k=1..lookahead) after the current one, crossing the round boundary.
 function upcoming(k){
 const idx=position+k;
 return idx<12?sequence[idx]:nextSequence[idx-12]
 }
 function buildDots(){$('dots').innerHTML=Array.from({length:bpn},()=>'<span class="dot"></span>').join('')}
+// Render the lookahead column: one NEXT/THEN-style entry per upcoming note,
+// shrinking and fading with distance so the current note stays dominant.
+function buildLookahead(){
+const wrap=$('lookahead');
+if(lookahead===0){wrap.innerHTML='';return}
+let html='';
+for(let k=1;k<=lookahead;k++){
+const size=Math.max(18,Math.round(38-3*k)),weight=k===1?500:400,op=Math.max(.5,1-.07*k).toFixed(2);
+const label=k===1?'NEXT':k===2?'THEN':'+'+k;
+html+=`<div class="next-wrap"><div class="next-label">${label}</div><div class="next" style="font-size:${size}px;font-weight:${weight};opacity:${op}">${upcoming(k).name}</div></div>`;
+}
+wrap.innerHTML=html;wrap.style.display='flex';wrap.style.alignItems='center';wrap.style.gap='clamp(12px,3.5vw,32px)';
+}
 function update(){
-const s=stringAt(position);$('current').textContent=sequence[position].name;$('next').textContent=upcoming(1).name;$('next2').textContent=upcoming(2).name;
+const s=stringAt(position);$('current').textContent=sequence[position].name;
+buildLookahead();
 $('string-label').textContent=`String ${s.number} · ${s.name}`;$('direction').textContent=position<6?'6th → 1st string':'1st → 6th string';$('progress').textContent=`Note ${position+1} / 12`;$('round').textContent=`Round ${round}`;
 updateDots()
 }
@@ -144,6 +162,13 @@ $('bpn-value').textContent=bpn;$('bpn-hint').textContent=`${bpn} beat${bpn===1?'
 if(beat>=bpn)beat=bpn-1;
 buildDots();updateDots()
 }
+function setLook(v){
+lookahead=Math.min(MAX_LOOK,Math.max(MIN_LOOK,v));
+$('la-value').textContent=lookahead;
+$('la-hint').textContent=lookahead===0?'Lookahead hidden':`Showing ${lookahead} upcoming note${lookahead===1?'':'s'}`;
+setCookie('gft-look',lookahead);
+update()
+}
 async function start(){
 if(running)return;
 try{
@@ -166,7 +191,11 @@ $('bpm-up').addEventListener('click',()=>setBpm(bpm+1));
 $('tempo').addEventListener('input',e=>setBpm(Number(e.target.value)));
 $('bpn-down').addEventListener('click',()=>setBpn(bpn-1));
 $('bpn-up').addEventListener('click',()=>setBpn(bpn+1));
+$('la-down').addEventListener('click',()=>setLook(lookahead-1));
+$('la-up').addEventListener('click',()=>setLook(lookahead+1));
 const saved=getCookie('gft-tempo');if(saved!==null&&!isNaN(+saved))setBpm(Math.round(+saved));
+const savedLook=getCookie('gft-look');if(savedLook!==null&&!isNaN(+savedLook))lookahead=Math.min(MAX_LOOK,Math.max(MIN_LOOK,Math.round(+savedLook)));
+$('la-value').textContent=lookahead;$('la-hint').textContent=lookahead===0?'Lookahead hidden':`Showing ${lookahead} upcoming note${lookahead===1?'':'s'}`;
 buildDots();update();
 })();
 </script>
