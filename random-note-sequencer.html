@@ -80,6 +80,7 @@ const flat=['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
 const enharmonic=new Set([1,3,6,8,10]);
 const strings=[{number:6,name:'Low E'},{number:5,name:'A'},{number:4,name:'D'},{number:3,name:'G'},{number:2,name:'B'},{number:1,name:'High E'}];
 let sequence=makeRound(),nextSequence=makeRound(),position=0,round=1,beat=0,bpm=40,bpn=6,lookahead=2,countIn=false,ciBeat=0,running=false,audio=null,timer=null,nextTime=0,epoch=0,pendingUpdate=false;
+let laSlots=[];// persistent {slot,label,next} per lookahead position
 
 // --- Cookies -------------------------------------------------------------
 function setCookie(name,value){const d=new Date();d.setFullYear(d.getFullYear()+1);document.cookie=name+'='+value+';expires='+d.toUTCString()+';path=/;SameSite=Lax'}
@@ -93,24 +94,78 @@ function upcoming(k){
 const idx=position+k;
 return idx<12?sequence[idx]:nextSequence[idx-12]
 }
-function buildDots(){$('dots').innerHTML=Array.from({length:bpn},()=>'<span class="dot"></span>').join('')}
-// Render the lookahead column: one fixed-width slot per upcoming note, shrinking
-// and fading with distance so the current note stays dominant. Slot widths never
-// depend on the note text, so nothing moves when notes change.
-function buildLookahead(){
-const wrap=$('lookahead');
-if(lookahead===0){wrap.innerHTML='';return}
-let html='';
-for(let k=1;k<=lookahead;k++){
-const size=Math.max(18,Math.round(38-3*k)),weight=k===1?500:400,op=Math.max(.5,1-.07*k).toFixed(2);
-const label=k===1?'NEXT':k===2?'THEN':'+'+k;
-html+=`<div class="slot la-slot"><div class="next-label">${label}</div><div class="next" style="font-size:${size}px;font-weight:${weight};opacity:${op}">${upcoming(k).name}</div></div>`;
+
+// --- Animation (inline, Web Animations API) --------------------------------
+// Horizontal slide: outgoing note glides left and out (~110ms), incoming note
+// glides in from the right (~200ms) — the sequence visually flows leftward, like
+// notes advancing along a conveyor. Per-element epoch counters make transitions
+// interruptible: a newer swap supersedes an older one, cancelling its animation
+// and ignoring its pending completion callback, so fast tempos never leave a note
+// half-faded. Falls back to an instant swap when Element.animate is unavailable.
+const canAnimate=typeof Element!=='undefined'&&!!Element.prototype.animate;
+const animEpoch=new Map();
+function cancelAnims(el){if(el.getAnimations)el.getAnimations().forEach(a=>a.cancel())}
+function swap(el,apply,finalOpacity){
+if(!canAnimate){apply();el.style.opacity=finalOpacity;return}
+const e=(animEpoch.get(el)||0)+1;animEpoch.set(el,e);
+cancelAnims(el);
+const cs=getComputedStyle(el);
+const fromTransform=cs.transform==='none'?'translateX(0)':cs.transform;
+const fromOpacity=parseFloat(el.style.opacity)>0?parseFloat(el.style.opacity):parseFloat(cs.opacity);
+el.animate([{transform:fromTransform,opacity:fromOpacity},{transform:'translateX(-16px)',opacity:0}],{duration:110,easing:'ease-in',fill:'forwards'});
+setTimeout(()=>{
+if(animEpoch.get(el)!==e)return;
+apply();
+const anim=el.animate([{transform:'translateX(18px)',opacity:0},{transform:'translateX(0)',opacity:finalOpacity}],{duration:200,easing:'ease-out',fill:'forwards'});
+anim.onfinish=()=>{if(animEpoch.get(el)===e){anim.cancel();el.style.transform='none';el.style.opacity=finalOpacity}}
+},110)
 }
-wrap.innerHTML=html;
+
+function buildDots(){$('dots').innerHTML=Array.from({length:bpn},()=>'<span class="dot"></span>').join('')}
+// Create/destroy the fixed-width lookahead slots to match the lookahead setting.
+// Called instantly (no animation) when the count changes.
+function syncLaSlots(){
+const wrap=$('lookahead');
+while(laSlots.length<lookahead){
+const slot=document.createElement('div');slot.className='slot la-slot';
+const label=document.createElement('div');label.className='next-label';
+const next=document.createElement('div');next.className='next';
+slot.append(label,next);wrap.append(slot);
+laSlots.push({slot,label,next})
+}
+while(laSlots.length>lookahead){laSlots.pop().slot.remove()}
+}
+// Slot styling per distance k: shrink and fade with distance so the current note
+// stays dominant.
+function laStyle(k){return{size:Math.max(18,Math.round(38-3*k))+'px',weight:k===1?500:400,opacity:Math.max(.5,1-.07*k)}}
+function laLabel(k){return k===1?'NEXT':k===2?'THEN':'+'+k}
+function buildLookahead(){
+syncLaSlots();
+for(let k=1;k<=lookahead;k++){
+const s=laSlots[k-1],st=laStyle(k);
+s.label.textContent=laLabel(k);
+s.next.style.fontSize=st.size;s.next.style.fontWeight=st.weight;
+s.next.textContent=upcoming(k).name;
+s.next.style.opacity=st.opacity;s.next.style.transform='none';
+}
 }
 function update(){
-const s=stringAt(position);$('current').textContent=sequence[position].name;
-buildLookahead();
+const s=stringAt(position);const cur=$('current');
+const curText=sequence[position].name;
+if(cur.textContent!==curText)swap(cur,()=>{cur.textContent=curText},1);
+else cur.textContent=curText;
+// Lookahead: animate every slot whose note changed; slots whose note is already
+// correct are left untouched.
+syncLaSlots();
+for(let k=1;k<=lookahead;k++){
+const el=laSlots[k-1].next,st=laStyle(k),want=upcoming(k).name;
+if(el.textContent!==want||el.dataset.k!=String(k)){
+el.dataset.k=String(k);
+swap(el,()=>{
+el.textContent=want;el.style.fontSize=st.size;el.style.fontWeight=st.weight;el.style.opacity=st.opacity;
+},st.opacity);
+}
+}
 $('string-label').textContent=`String ${s.number} · ${s.name}`;$('direction').textContent=position<6?'6th → 1st string':'1st → 6th string';$('progress').textContent=`Note ${position+1} / 12`;$('round').textContent=`Round ${round}`;
 updateDots()
 }
@@ -172,7 +227,7 @@ lookahead=Math.min(MAX_LOOK,Math.max(MIN_LOOK,v));
 $('la-value').textContent=lookahead;
 $('la-hint').textContent=lookahead===0?'Lookahead hidden':`Showing ${lookahead} upcoming note${lookahead===1?'':'s'}`;
 setCookie('gft-look',lookahead);
-update()
+buildLookahead()
 }
 async function start(){
 if(running)return;
@@ -182,7 +237,9 @@ if(!audio)audio=new AC();await audio.resume();
 sequence=makeRound();nextSequence=makeRound();position=0;round=1;beat=0;countIn=true;ciBeat=0;pendingUpdate=false;
 running=true;epoch++;
 $('start').disabled=true;$('stop').disabled=false;$('status').textContent='Practising';$('metro-state').textContent='Playing';$('error').textContent='';
-buildDots();update();nextTime=audio.currentTime+.05;tick()
+// Rebuild the board instantly (fresh sequences), clearing any in-flight animations.
+[$('current'),...laSlots.map(s=>s.next)].forEach(el=>{animEpoch.set(el,(animEpoch.get(el)||0)+1);cancelAnims(el)});
+buildDots();buildLookahead();update();nextTime=audio.currentTime+.05;tick()
 }catch(e){$('error').textContent=e.message}
 }
 function stop(){
@@ -201,7 +258,7 @@ $('la-up').addEventListener('click',()=>setLook(lookahead+1));
 const saved=getCookie('gft-tempo');if(saved!==null&&!isNaN(+saved))setBpm(Math.round(+saved));
 const savedLook=getCookie('gft-look');if(savedLook!==null&&!isNaN(+savedLook))lookahead=Math.min(MAX_LOOK,Math.max(MIN_LOOK,Math.round(+savedLook)));
 $('la-value').textContent=lookahead;$('la-hint').textContent=lookahead===0?'Lookahead hidden':`Showing ${lookahead} upcoming note${lookahead===1?'':'s'}`;
-buildDots();update();
+buildDots();buildLookahead();update();
 })();
 </script>
 </body></html>
