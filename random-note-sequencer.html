@@ -37,6 +37,20 @@ button.primary{background:var(--accent);border-color:var(--accent);color:white}b
 .controls{width:100%;display:flex;gap:12px}
 .foot{width:100%;font-size:12px;color:var(--muted);line-height:1.65}
 @media(max-width:420px){main{padding:22px 14px 36px;gap:14px}.card{padding:16px}.notes{min-height:130px}}
+/* --- Note selector: piano keyboard layout -------------------------------- */
+/* Seven natural (white) keys in one row; the accidental (black) keys sit above,
+   offset to straddle the boundaries between their neighbouring white keys. */
+.piano{position:relative;margin-top:14px}
+.keys-white{display:grid;grid-template-columns:repeat(7,1fr)}
+.key{position:relative;display:flex;align-items:flex-end;justify-content:center;font-weight:650;cursor:pointer;border:1px solid var(--border);user-select:none;-webkit-user-select:none}
+.key input{position:absolute;opacity:0;pointer-events:none}
+.key:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.kw{height:58px;padding-bottom:8px;font-size:13px;border-radius:0 0 7px 7px;background:var(--card);color:var(--text)}
+.kw+.kw{margin-left:-1px}
+.kw:not(.sel){background:var(--panel);color:var(--muted)}
+.kb{position:absolute;top:0;height:40px;width:calc(100%/7*.58);transform:translateX(-50%);padding-bottom:6px;font-size:11px;border-radius:0 0 6px 6px;background:var(--text);color:var(--card);z-index:1}
+.kb:not(.sel){opacity:.45}
+@media(max-width:420px){.kw{height:48px;padding-bottom:6px;font-size:12px}.kb{height:33px}}
 </style>
 </head>
 <body>
@@ -68,7 +82,27 @@ button.primary{background:var(--accent);border-color:var(--accent);color:white}b
 </div>
 </section>
 <div class="controls"><button class="primary" id="start">▶ Start</button><button id="stop" disabled>■ Stop</button></div>
-<div class="foot"><strong>How it works</strong><br>A 4-beat count-in leads you in. All 12 chromatic notes are played once before a new random round begins. Each press of Start shuffles a fresh random order; Stop pauses the exercise. Your tempo and lookahead are remembered between visits.</div>
+<section class="card">
+<div class="stat-label">NOTES TO PRACTISE</div>
+<div class="piano" id="piano">
+<div class="keys-white">
+<label class="key kw"><input type="checkbox" data-note="0" checked>C</label>
+<label class="key kw"><input type="checkbox" data-note="2" checked>D</label>
+<label class="key kw"><input type="checkbox" data-note="4" checked>E</label>
+<label class="key kw"><input type="checkbox" data-note="5" checked>F</label>
+<label class="key kw"><input type="checkbox" data-note="7" checked>G</label>
+<label class="key kw"><input type="checkbox" data-note="9" checked>A</label>
+<label class="key kw"><input type="checkbox" data-note="11" checked>B</label>
+</div>
+<label class="key kb" style="left:calc(100%/7*1)"><input type="checkbox" data-note="1" checked>C♯</label>
+<label class="key kb" style="left:calc(100%/7*2)"><input type="checkbox" data-note="3" checked>D♯</label>
+<label class="key kb" style="left:calc(100%/7*4)"><input type="checkbox" data-note="6" checked>F♯</label>
+<label class="key kb" style="left:calc(100%/7*5)"><input type="checkbox" data-note="8" checked>G♯</label>
+<label class="key kb" style="left:calc(100%/7*6)"><input type="checkbox" data-note="10" checked>A♯</label>
+</div>
+<div class="hint" id="notes-hint">All 12 notes selected · changes apply from the next sequence</div>
+</section>
+<div class="foot"><strong>How it works</strong><br>A 4-beat count-in leads you in. All selected notes are played once before a new random round begins. Each press of Start shuffles a fresh random order; Stop pauses the exercise. Your tempo, lookahead and note selection are remembered between visits. Notes you untick in the keyboard below stop appearing once the current sequence finishes — handy for drilling just the sharps and flats, for example.</div>
 <div class="foot" id="error" role="status"></div>
 </main>
 <script>
@@ -79,6 +113,12 @@ const sharp=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 const flat=['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
 const enharmonic=new Set([1,3,6,8,10]);
 const strings=[{number:6,name:'Low E'},{number:5,name:'A'},{number:4,name:'D'},{number:3,name:'G'},{number:2,name:'B'},{number:1,name:'High E'}];
+// Which chromatic pitches (indices 0..11) may be drawn into a new sequence.
+// Declared before the state that depends on it: makeRound() runs during the
+// initialisation of `sequence` below, so `allowed` must already be initialised.
+// Changing this only affects sequences created afterwards, so the current
+// round always plays to completion before the selection takes effect.
+let allowed=new Set(Array.from({length:12},(_,i)=>i));
 let sequence=makeRound(),nextSequence=makeRound(),position=0,round=1,beat=0,bpm=40,bpn=6,lookahead=2,countIn=false,ciBeat=0,running=false,audio=null,timer=null,nextTime=0,epoch=0,pendingUpdate=false;
 let laSlots=[];// persistent {slot,label,next} per lookahead position
 
@@ -87,12 +127,18 @@ function setCookie(name,value){const d=new Date();d.setFullYear(d.getFullYear()+
 function getCookie(name){const m=document.cookie.match(new RegExp('(?:^|; )'+name+'=([^;]*)'));return m?decodeURIComponent(m[1]):null}
 
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
-function makeRound(){return shuffle(Array.from({length:12},(_,i)=>i)).map(n=>({pitch:n,name:enharmonic.has(n)&&Math.random()<.5?flat[n]:sharp[n]}))}
+// Build a round from the currently selected notes only. If nothing is selected
+// (should not normally happen — the UI prevents it), fall back to all 12.
+function makeRound(){
+const pool=allowed.size?[...allowed]:Array.from({length:12},(_,i)=>i);
+return shuffle(pool).map(n=>({pitch:n,name:enharmonic.has(n)&&Math.random()<.5?flat[n]:sharp[n]}))
+}
 function stringAt(p){return p<6?strings[p]:strings[11-p]}
 // The k-th upcoming note (k=1..lookahead) after the current one, crossing the round boundary.
+// Rounds may now be shorter than 12 notes, so lengths are read dynamically.
 function upcoming(k){
-const idx=position+k;
-return idx<12?sequence[idx]:nextSequence[idx-12]
+const L=sequence.length,idx=position+k;
+return idx<L?sequence[idx]:nextSequence[idx-L]
 }
 
 // --- Animation (inline, Web Animations API) --------------------------------
@@ -142,10 +188,10 @@ function laLabel(k){return k===1?'NEXT':k===2?'THEN':'+'+k}
 function buildLookahead(){
 syncLaSlots();
 for(let k=1;k<=lookahead;k++){
-const s=laSlots[k-1],st=laStyle(k);
+const s=laSlots[k-1],st=laStyle(k),u=upcoming(k);
 s.label.textContent=laLabel(k);
 s.next.style.fontSize=st.size;s.next.style.fontWeight=st.weight;
-s.next.textContent=upcoming(k).name;
+s.next.textContent=u?u.name:'·';
 s.next.style.opacity=st.opacity;s.next.style.transform='none';
 }
 }
@@ -155,10 +201,11 @@ const curText=sequence[position].name;
 if(cur.textContent!==curText)swap(cur,()=>{cur.textContent=curText},1);
 else cur.textContent=curText;
 // Lookahead: animate every slot whose note changed; slots whose note is already
-// correct are left untouched.
+// correct are left untouched. A '·' placeholder marks positions past the end of
+// a short sequence (possible when the note selection is smaller than the lookahead).
 syncLaSlots();
 for(let k=1;k<=lookahead;k++){
-const el=laSlots[k-1].next,st=laStyle(k),want=upcoming(k).name;
+const el=laSlots[k-1].next,st=laStyle(k),u=upcoming(k),want=u?u.name:'·';
 if(el.textContent!==want||el.dataset.k!=String(k)){
 el.dataset.k=String(k);
 swap(el,()=>{
@@ -166,7 +213,7 @@ el.textContent=want;el.style.fontSize=st.size;el.style.fontWeight=st.weight;el.s
 },st.opacity);
 }
 }
-$('string-label').textContent=`String ${s.number} · ${s.name}`;$('direction').textContent=position<6?'6th → 1st string':'1st → 6th string';$('progress').textContent=`Note ${position+1} / 12`;$('round').textContent=`Round ${round}`;
+$('string-label').textContent=`String ${s.number} · ${s.name}`;$('direction').textContent=position<6?'6th → 1st string':'1st → 6th string';$('progress').textContent=`Note ${position+1} / ${sequence.length}`;$('round').textContent=`Round ${round}`;
 updateDots()
 }
 function updateDots(){
@@ -193,7 +240,7 @@ ciBeat++;
 if(ciBeat>=COUNT_IN){countIn=false;ciBeat=0;beat=0;pendingUpdate=true}
 }else{
 beat++;
-if(beat>=bpn){beat=0;position++;if(position>=12){position=0;round++;sequence=nextSequence;nextSequence=makeRound()}pendingUpdate=true}
+if(beat>=bpn){beat=0;position++;if(position>=sequence.length){position=0;round++;sequence=nextSequence;nextSequence=makeRound()}pendingUpdate=true}
 }
 }
 function flash(){const p=$('pulse');p.style.background='var(--accent)';setTimeout(()=>{if(!running)p.style.background='var(--border)'},140)}
@@ -229,6 +276,24 @@ $('la-hint').textContent=lookahead===0?'Lookahead hidden':`Showing ${lookahead} 
 setCookie('gft-look',lookahead);
 buildLookahead()
 }
+// --- Note selection (piano keyboard) ---------------------------------------
+const noteInputs=[...document.querySelectorAll('#piano input')];
+function refreshNotesUI(){
+noteInputs.forEach(cb=>cb.parentElement.classList.toggle('sel',cb.checked));
+$('notes-hint').textContent=`${allowed.size} of 12 notes selected · changes apply from the next sequence`
+}
+noteInputs.forEach(cb=>{
+cb.addEventListener('change',()=>{
+const n=+cb.dataset.note;
+if(!cb.checked&&allowed.size<=1){
+// Never let the selection become empty — revert the last remaining note.
+cb.checked=true;$('notes-hint').textContent='Keep at least one note selected';return
+}
+if(cb.checked)allowed.add(n);else allowed.delete(n);
+setCookie('gft-notes',[...allowed].sort((a,b)=>a-b).join(''));
+refreshNotesUI()
+})
+});
 async function start(){
 if(running)return;
 try{
@@ -258,6 +323,13 @@ $('la-up').addEventListener('click',()=>setLook(lookahead+1));
 const saved=getCookie('gft-tempo');if(saved!==null&&!isNaN(+saved))setBpm(Math.round(+saved));
 const savedLook=getCookie('gft-look');if(savedLook!==null&&!isNaN(+savedLook))lookahead=Math.min(MAX_LOOK,Math.max(MIN_LOOK,Math.round(+savedLook)));
 $('la-value').textContent=lookahead;$('la-hint').textContent=lookahead===0?'Lookahead hidden':`Showing ${lookahead} upcoming note${lookahead===1?'':'s'}`;
+const savedNotes=getCookie('gft-notes');
+if(savedNotes&&/^[0-9]+$/.test(savedNotes)){
+const set=new Set(savedNotes.split('').map(Number));
+if(set.size)allowed=set
+}
+noteInputs.forEach(cb=>cb.checked=allowed.has(+cb.dataset.note));
+refreshNotesUI();
 buildDots();buildLookahead();update();
 })();
 </script>
