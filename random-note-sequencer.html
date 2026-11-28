@@ -57,7 +57,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:white}b
 <main>
 <header><div><div class="eyebrow">RANDOM NOTE SEQUENCER</div><div class="sub">Chromatic note recognition</div></div><div class="status" id="status">Ready</div></header>
 <section class="card display">
-<div class="display-top"><span>CURRENT NOTE</span><span id="direction">6th → 1st string</span></div>
+<div class="display-top"><span>CURRENT NOTE</span></div>
 <div class="notes"><div class="slot current-slot"><div class="current" id="current" aria-live="polite">—</div></div><div id="lookahead" style="display:flex;align-items:center;gap:clamp(10px,3vw,28px)"></div></div>
 <div class="details"><strong id="string-label">String 6 · Low E</strong><span class="muted">|</span><span class="muted" id="progress">Note 1 / 12</span><span class="muted">|</span><span class="muted" id="round">Round 1</span></div>
 <div class="dots" id="dots" aria-label="Beat progress"></div>
@@ -213,7 +213,7 @@ el.textContent=want;el.style.fontSize=st.size;el.style.fontWeight=st.weight;el.s
 },st.opacity);
 }
 }
-$('string-label').textContent=`String ${s.number} · ${s.name}`;$('direction').textContent=position<6?'6th → 1st string':'1st → 6th string';$('progress').textContent=`Note ${position+1} / ${sequence.length}`;$('round').textContent=`Round ${round}`;
+$('string-label').textContent=`String ${s.number} · ${s.name}`;$('progress').textContent=`Note ${position+1} / ${sequence.length}`;$('round').textContent=`Round ${round}`;
 updateDots()
 }
 function updateDots(){
