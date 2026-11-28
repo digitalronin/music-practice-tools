@@ -102,7 +102,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:white}b
 </div>
 <div class="hint" id="notes-hint">All 12 notes selected · changes apply from the next sequence</div>
 </section>
-<div class="foot"><strong>How it works</strong><br>A 4-beat count-in leads you in. All selected notes are played once before a new random round begins. Each press of Start shuffles a fresh random order; Stop pauses the exercise. Your tempo, lookahead and note selection are remembered between visits. Notes you untick in the keyboard below stop appearing once the current sequence finishes — handy for drilling just the sharps and flats, for example.</div>
+<div class="foot"><strong>How it works</strong><br>A 4-beat count-in leads you in. All selected notes are played once before a new random round begins. Each press of Start shuffles a fresh random order; Stop pauses the exercise. Your tempo, lookahead and note selection are remembered between visits. Notes you untick in the keyboard below stop appearing once the current sequence finishes — the next round is already built from the new selection, so you never have to sit through a stale round.</div>
 <div class="foot" id="error" role="status"></div>
 </main>
 <script>
@@ -116,8 +116,8 @@ const strings=[{number:6,name:'Low E'},{number:5,name:'A'},{number:4,name:'D'},{
 // Which chromatic pitches (indices 0..11) may be drawn into a new sequence.
 // Declared before the state that depends on it: makeRound() runs during the
 // initialisation of `sequence` below, so `allowed` must already be initialised.
-// Changing this only affects sequences created afterwards, so the current
-// round always plays to completion before the selection takes effect.
+// Changing the selection leaves the current round untouched, but replaces the
+// queued next round immediately, so it takes effect at the next round boundary.
 let allowed=new Set(Array.from({length:12},(_,i)=>i));
 let sequence=makeRound(),nextSequence=makeRound(),position=0,round=1,beat=0,bpm=40,bpn=6,lookahead=2,countIn=false,ciBeat=0,running=false,audio=null,timer=null,nextTime=0,epoch=0,pendingUpdate=false;
 let laSlots=[];// persistent {slot,label,next} per lookahead position
@@ -291,6 +291,12 @@ cb.checked=true;$('notes-hint').textContent='Keep at least one note selected';re
 }
 if(cb.checked)allowed.add(n);else allowed.delete(n);
 setCookie('gft-notes',[...allowed].sort((a,b)=>a-b).join(''));
+// The current round keeps playing, but the queued next round is rebuilt from
+// the new selection straight away, so the change lands at the next round
+// boundary. Refresh the lookahead display, whose slots past the end of the
+// current round now show notes from the replacement sequence.
+nextSequence=makeRound();
+buildLookahead();
 refreshNotesUI()
 })
 });
